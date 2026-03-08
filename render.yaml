@@ -2,16 +2,7 @@ services:
   - type: web
     name: ai-hirano-kun
     runtime: python
-    buildCommand: >
-      pip install -r requirements.txt &&
-      mkdir -p fonts &&
-      pip install gdown &&
-      python -c "
-      import urllib.request, zipfile, os, shutil;
-      urllib.request.urlretrieve('https://fonts.google.com/download?family=Noto+Sans+JP', '/tmp/noto.zip');
-      zipfile.ZipFile('/tmp/noto.zip', 'r').extractall('/tmp/noto');
-      [shutil.copy2(os.path.join(r, f), 'fonts/') for r, d, fs in os.walk('/tmp/noto') for f in fs if f.endswith('.ttf')]
-      "
+    buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
     envVars:
       - key: LINE_CHANNEL_SECRET

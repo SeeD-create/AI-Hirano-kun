@@ -6,7 +6,13 @@ import logging
 
 from PIL import Image, ImageDraw, ImageFont
 
-from config import IMAGE_OUTPUT_DIR, FONT_PATH, FONT_BOLD_PATH, IMAGE_CLEANUP_TTL
+from config import (
+    IMAGE_OUTPUT_DIR,
+    FONT_PATH,
+    IMAGE_CLEANUP_TTL,
+    FONT_WEIGHT_REGULAR,
+    FONT_WEIGHT_BOLD,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,18 +35,37 @@ PREVIEW_MAX_WIDTH = 240
 class ImageRenderer:
     def __init__(self):
         os.makedirs(IMAGE_OUTPUT_DIR, exist_ok=True)
+        self.font = self._load_font(FONT_SIZE, FONT_WEIGHT_REGULAR)
+        self.font_bold = self._load_font(HEADING_FONT_SIZE, FONT_WEIGHT_BOLD)
+        self._validate_japanese_rendering()
+
+    def _load_font(self, size: int, weight: int):
+        """Variable Fontを指定サイズ・ウェイトで読み込む"""
         try:
-            self.font = ImageFont.truetype(FONT_PATH, FONT_SIZE)
-            self.font_bold = ImageFont.truetype(FONT_BOLD_PATH, HEADING_FONT_SIZE)
+            font = ImageFont.truetype(FONT_PATH, size)
+            font.set_variation_by_axes([weight])
+            logger.info("Loaded font: %s (size=%d, weight=%d)", FONT_PATH, size, weight)
+            return font
         except OSError:
-            logger.warning("Noto Sans JP not found, trying bold path for regular too")
-            try:
-                self.font = ImageFont.truetype(FONT_BOLD_PATH, FONT_SIZE)
-                self.font_bold = ImageFont.truetype(FONT_BOLD_PATH, HEADING_FONT_SIZE)
-            except OSError:
-                logger.warning("No Japanese fonts found, using default")
-                self.font = ImageFont.load_default(size=FONT_SIZE)
-                self.font_bold = ImageFont.load_default(size=HEADING_FONT_SIZE)
+            logger.error("CRITICAL: Font file not found at %s", FONT_PATH)
+            return ImageFont.load_default(size=size)
+        except Exception as e:
+            logger.error("Font loading error: %s", e, exc_info=True)
+            return ImageFont.load_default(size=size)
+
+    def _validate_japanese_rendering(self):
+        """起動時に日本語が描画できるか検証"""
+        img = Image.new("RGB", (50, 50), (255, 255, 255))
+        draw = ImageDraw.Draw(img)
+        draw.text((5, 5), "あ", font=self.font, fill=(0, 0, 0))
+        pixels = list(img.getdata())
+        if any(p != (255, 255, 255) for p in pixels):
+            logger.info("Font validation passed: Japanese glyphs render correctly.")
+        else:
+            logger.error(
+                "CRITICAL: Font validation FAILED. Japanese text renders as blank/tofu. "
+                "Check that %s exists and contains Japanese glyphs.", FONT_PATH
+            )
 
     def render_text_to_image(self, text: str) -> tuple[str, str]:
         """テキストをPNG画像にレンダリングし、(original, preview) のファイル名を返す"""
