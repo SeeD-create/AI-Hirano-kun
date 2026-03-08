@@ -43,15 +43,20 @@ class ImageRenderer:
         """Variable Fontを指定サイズ・ウェイトで読み込む"""
         try:
             font = ImageFont.truetype(FONT_PATH, size)
-            font.set_variation_by_axes([weight])
-            logger.info("Loaded font: %s (size=%d, weight=%d)", FONT_PATH, size, weight)
-            return font
         except OSError:
             logger.error("CRITICAL: Font file not found at %s", FONT_PATH)
             return ImageFont.load_default(size=size)
         except Exception as e:
             logger.error("Font loading error: %s", e, exc_info=True)
             return ImageFont.load_default(size=size)
+
+        try:
+            font.set_variation_by_axes([weight])
+            logger.info("Loaded font: %s (size=%d, weight=%d)", FONT_PATH, size, weight)
+        except Exception:
+            logger.warning("Variable font axes not supported, using default weight for %s", FONT_PATH)
+
+        return font
 
     def _validate_japanese_rendering(self):
         """起動時に日本語が描画できるか検証"""

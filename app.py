@@ -82,14 +82,7 @@ def handle_text_message(event):
         send_text_reply(event.reply_token, "申し訳ありません、エラーが発生しました。もう一度お試しください 🙏")
         return
 
-    try:
-        send_image_reply(event.reply_token, reply_text)
-    except Exception as e:
-        logger.error("Image reply failed, falling back to text: %s", e, exc_info=True)
-        try:
-            send_text_reply(event.reply_token, truncate_reply(reply_text))
-        except Exception:
-            logger.error("Text fallback also failed", exc_info=True)
+    send_image_reply(event.reply_token, reply_text)
 
 
 @handler.add(MessageEvent, message=ImageMessageContent)
@@ -111,14 +104,7 @@ def handle_image_message(event):
         send_text_reply(event.reply_token, "画像の処理中にエラーが発生しました。もう一度お試しください 🙏")
         return
 
-    try:
-        send_image_reply(event.reply_token, reply_text)
-    except Exception as e:
-        logger.error("Image reply failed for image msg: %s", e, exc_info=True)
-        try:
-            send_text_reply(event.reply_token, truncate_reply(reply_text))
-        except Exception:
-            logger.error("Text fallback also failed", exc_info=True)
+    send_image_reply(event.reply_token, reply_text)
 
 
 def send_image_reply(reply_token: str, text: str):

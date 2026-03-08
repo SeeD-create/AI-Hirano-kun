@@ -104,8 +104,12 @@ class GeminiClient:
     def send_text(self, user_id: str, text: str) -> str:
         """テキストメッセージを送信し、応答を取得"""
         chat = self._get_or_create_chat(user_id)
-        response = chat.send_message(text)
-        return response.text
+        try:
+            response = chat.send_message(text)
+            return response.text
+        except Exception:
+            self.reset_history(user_id)
+            raise
 
     def send_image(self, user_id: str, image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
         """画像（+プロンプト）を送信し、応答を取得"""
@@ -114,8 +118,12 @@ class GeminiClient:
             types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
             "この画像の内容を確認して、問題があれば解答と解説をお願いします。英語の問題であれば添削も含めてください。",
         ]
-        response = chat.send_message(contents)
-        return response.text
+        try:
+            response = chat.send_message(contents)
+            return response.text
+        except Exception:
+            self.reset_history(user_id)
+            raise
 
     def reset_history(self, user_id: str):
         """ユーザーの会話履歴をリセット"""
