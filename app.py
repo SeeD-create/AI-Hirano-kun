@@ -1,6 +1,6 @@
 import os
 import logging
-from flask import Flask, request, abort
+from flask import Flask, request, abort, send_from_directory
 
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
@@ -16,14 +16,18 @@ from linebot.v3.messaging import (
     MessagingApiBlob,
     ReplyMessageRequest,
     TextMessage,
+    ImageMessage,
 )
 
 from config import (
     LINE_CHANNEL_SECRET,
     LINE_CHANNEL_ACCESS_TOKEN,
     LINE_REPLY_MAX_LENGTH,
+    BASE_URL,
+    IMAGE_OUTPUT_DIR,
 )
 from gemini_client import GeminiClient
+from image_renderer import ImageRenderer
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -32,11 +36,18 @@ app = Flask(__name__)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
 gemini = GeminiClient()
+renderer = ImageRenderer()
 
 
 @app.route("/", methods=["GET"])
 def health_check():
     return "AI平野くん is running!", 200
+
+
+@app.route("/images/<filename>", methods=["GET"])
+def serve_image(filename):
+    """生成した画像を配信"""
+    return send_from_directory(IMAGE_OUTPUT_DIR, filename, mimetype="image/png")
 
 
 @app.route("/callback", methods=["POST"])
@@ -61,16 +72,17 @@ def handle_text_message(event):
 
     if user_text in ("リセット", "reset"):
         gemini.reset_history(user_id)
-        reply_text = "会話履歴をリセットしました！新しい会話を始めましょう 📚"
-    else:
-        try:
-            reply_text = gemini.send_text(user_id, user_text)
-        except Exception as e:
-            logger.error("Gemini API error: %s", e, exc_info=True)
-            reply_text = "申し訳ありません、エラーが発生しました。もう一度お試しください 🙏"
+        send_text_reply(event.reply_token, "会話履歴をリセットしました！新しい会話を始めましょう 📚")
+        return
 
-    reply_text = truncate_reply(reply_text)
-    send_reply(event.reply_token, reply_text)
+    try:
+        reply_text = gemini.send_text(user_id, user_text)
+    except Exception as e:
+        logger.error("Gemini API error: %s", e, exc_info=True)
+        send_text_reply(event.reply_token, "申し訳ありません、エラーが発生しました。もう一度お試しください 🙏")
+        return
+
+    send_image_reply(event.reply_token, reply_text)
 
 
 @handler.add(MessageEvent, message=ImageMessageContent)
@@ -89,19 +101,43 @@ def handle_image_message(event):
         )
     except Exception as e:
         logger.error("Image processing error: %s", e, exc_info=True)
-        reply_text = "画像の処理中にエラーが発生しました。もう一度お試しください 🙏"
+        send_text_reply(event.reply_token, "画像の処理中にエラーが発生しました。もう一度お試しください 🙏")
+        return
 
-    reply_text = truncate_reply(reply_text)
-    send_reply(event.reply_token, reply_text)
-
-
-def truncate_reply(text: str) -> str:
-    if len(text) > LINE_REPLY_MAX_LENGTH:
-        return text[: LINE_REPLY_MAX_LENGTH - 30] + "\n\n...（文字数制限のため省略されました）"
-    return text
+    send_image_reply(event.reply_token, reply_text)
 
 
-def send_reply(reply_token: str, text: str):
+def send_image_reply(reply_token: str, text: str):
+    """テキストを画像にレンダリングして返信。失敗時はテキストフォールバック。"""
+    renderer.cleanup_old_images()
+
+    try:
+        original_name, preview_name = renderer.render_text_to_image(text)
+        original_url = f"{BASE_URL}/images/{original_name}"
+        preview_url = f"{BASE_URL}/images/{preview_name}"
+
+        messages = [
+            ImageMessage(
+                original_content_url=original_url,
+                preview_image_url=preview_url,
+            ),
+        ]
+    except Exception as e:
+        logger.error("Image rendering error: %s", e, exc_info=True)
+        messages = [TextMessage(text=truncate_reply(text))]
+
+    with ApiClient(configuration) as api_client:
+        line_bot_api = MessagingApi(api_client)
+        line_bot_api.reply_message(
+            ReplyMessageRequest(
+                reply_token=reply_token,
+                messages=messages,
+            )
+        )
+
+
+def send_text_reply(reply_token: str, text: str):
+    """テキストのみで返信（リセット確認やエラー時）"""
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
         line_bot_api.reply_message(
@@ -110,6 +146,12 @@ def send_reply(reply_token: str, text: str):
                 messages=[TextMessage(text=text)],
             )
         )
+
+
+def truncate_reply(text: str) -> str:
+    if len(text) > LINE_REPLY_MAX_LENGTH:
+        return text[: LINE_REPLY_MAX_LENGTH - 30] + "\n\n...（文字数制限のため省略されました）"
+    return text
 
 
 if __name__ == "__main__":
