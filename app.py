@@ -1,6 +1,7 @@
+import io
 import os
 import logging
-from flask import Flask, request, abort, send_from_directory
+from flask import Flask, request, abort, send_from_directory, send_file
 
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
@@ -42,6 +43,46 @@ renderer = ImageRenderer()
 @app.route("/", methods=["GET"])
 def health_check():
     return "AI平野くん is running!", 200
+
+
+@app.route("/test-image", methods=["GET"])
+def test_image():
+    """サーバー上のフォント描画を診断するテスト画像"""
+    from PIL import Image, ImageDraw, ImageFont
+    from config import FONT_PATH
+
+    info_lines = [f"Font path: {FONT_PATH}", f"Exists: {os.path.exists(FONT_PATH)}"]
+
+    try:
+        font = ImageFont.truetype(FONT_PATH, 28)
+        info_lines.append("truetype: OK")
+    except Exception as e:
+        font = ImageFont.load_default(size=28)
+        info_lines.append(f"truetype: FAILED ({e})")
+
+    try:
+        font.set_variation_by_axes([400])
+        info_lines.append("variation: OK")
+    except Exception as e:
+        info_lines.append(f"variation: FAILED ({e})")
+
+    img = Image.new("RGB", (600, 300), (255, 255, 255))
+    draw = ImageDraw.Draw(img)
+    y = 10
+    for line in info_lines:
+        draw.text((10, y), line, font=ImageFont.load_default(size=16), fill=(100, 100, 100))
+        y += 22
+    y += 10
+    draw.text((10, y), "日本語テスト: こんにちは世界", font=font, fill=(0, 0, 0))
+    y += 40
+    draw.text((10, y), "English test: Hello World", font=font, fill=(0, 0, 0))
+    y += 40
+    draw.text((10, y), "【見出し】★★★☆☆ 箇条書き・テスト", font=font, fill=(0, 0, 0))
+
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+    buf.seek(0)
+    return send_file(buf, mimetype="image/png")
 
 
 @app.route("/images/<filename>", methods=["GET"])
