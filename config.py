@@ -23,3 +23,13 @@ FONT_WEIGHT_REGULAR = 400
 FONT_WEIGHT_BOLD = 700
 BASE_URL = os.environ.get("BASE_URL", "https://ai-hirano-kun.onrender.com")
 IMAGE_CLEANUP_TTL = 300  # 秒 (5分)
+
+# 専門AI案内設定
+SPECIALIZED_BOTS = {
+    "英検": {
+        "name": "英検AI先生",
+        "url": os.environ.get("EIKEN_BOT_URL", ""),
+        "description": "英検対策に特化したAI先生です。級別の単語・イディオム対策、要約問題、メール返信、英作文添削など、英検合格に必要な全てをサポートします。",
+        "keywords": ["英検", "eiken", "英語検定"],
+    },
+}

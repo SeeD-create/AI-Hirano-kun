@@ -26,6 +26,7 @@ from config import (
     LINE_REPLY_MAX_LENGTH,
     BASE_URL,
     IMAGE_OUTPUT_DIR,
+    SPECIALIZED_BOTS,
 )
 from gemini_client import GeminiClient
 from image_renderer import ImageRenderer
@@ -116,6 +117,17 @@ def handle_text_message(event):
         send_text_reply(event.reply_token, "会話履歴をリセットしました！新しい会話を始めましょう 📚")
         return
 
+    # 専門AIボットへの案内
+    bot_info = _match_specialized_bot(user_text)
+    if bot_info:
+        msg = f"💡 {bot_info['name']}のご案内\n\n{bot_info['description']}"
+        if bot_info["url"]:
+            msg += f"\n\n👇 友だち追加はこちら\n{bot_info['url']}"
+        else:
+            msg += "\n\n（近日公開予定です。お楽しみに！）"
+        send_text_reply(event.reply_token, msg)
+        return
+
     try:
         reply_text = gemini.send_text(user_id, user_text)
     except Exception as e:
@@ -187,6 +199,16 @@ def send_text_reply(reply_token: str, text: str):
                 messages=[TextMessage(text=text)],
             )
         )
+
+
+def _match_specialized_bot(text: str) -> dict | None:
+    """テキストに専門AIボットのキーワードが含まれていれば案内情報を返す"""
+    text_lower = text.lower()
+    for bot_info in SPECIALIZED_BOTS.values():
+        for keyword in bot_info["keywords"]:
+            if keyword.lower() in text_lower:
+                return bot_info
+    return None
 
 
 def truncate_reply(text: str) -> str:
